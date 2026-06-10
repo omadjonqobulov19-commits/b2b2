@@ -110,7 +110,7 @@ class UserCreate(BaseModel):
     email: str
     full_name: str
     password: str
-    is_admin: bool = False
+    is_admin: Optional[bool] = False
 
 class CompanyCreate(BaseModel):
     name: str
@@ -127,7 +127,7 @@ class PromotionCreate(BaseModel):
     title: str
     description: str
     discount_percent: float
-    bonus_percent: float = 5.0
+    bonus_percent: Optional[float] = 5.0
     start_date: datetime
     end_date: datetime
 
@@ -139,8 +139,12 @@ def root():
 def register(user_data: UserCreate, db: Session = Depends(get_db)):
     if db.query(User).filter(User.email == user_data.email).first():
         raise HTTPException(status_code=400, detail="Email allaqachon royxatdan otgan")
-    user = User(email=user_data.email, full_name=user_data.full_name,
-                hashed_password=pwd_context.hash(user_data.password), is_admin=user_data.is_admin)
+    user = User(
+        email=user_data.email,
+        full_name=user_data.full_name,
+        hashed_password=pwd_context.hash(user_data.password),
+        is_admin=user_data.is_admin if user_data.is_admin is not None else False
+    )
     db.add(user)
     db.commit()
     return {"message": "Muvaffaqiyatli royxatdan otildi"}
@@ -165,7 +169,7 @@ def get_companies(db: Session = Depends(get_db), current_user=Depends(get_curren
 def create_company(data: CompanyCreate, db: Session = Depends(get_db), current_user=Depends(get_current_user)):
     if db.query(Company).filter(Company.stir == data.stir).first():
         raise HTTPException(status_code=400, detail="Bu STIR bilan kompaniya mavjud")
-    company = Company(**data.dict())
+    company = Company(name=data.name, stir=data.stir, phone=data.phone, address=data.address)
     db.add(company)
     db.commit()
     db.refresh(company)
@@ -200,7 +204,7 @@ def create_order(data: OrderCreate, db: Session = Depends(get_db), current_user=
     bonus_percent = promo.bonus_percent if promo else 5.0
     bonus_amount = data.amount * (bonus_percent / 100)
     bonus = Bonus(company_id=data.company_id, order_id=order.id, amount=bonus_amount,
-                  description=f"Buyurtma #{order.id} uchun {bonus_percent}% bonus")
+                  description="Buyurtma #" + str(order.id) + " uchun " + str(bonus_percent) + "% bonus")
     db.add(bonus)
     company.bonus_balance += bonus_amount
     db.commit()
@@ -218,7 +222,12 @@ def get_promotions(db: Session = Depends(get_db), current_user=Depends(get_curre
 
 @app.post("/api/promotions/")
 def create_promotion(data: PromotionCreate, db: Session = Depends(get_db), current_user=Depends(get_current_user)):
-    promo = Promotion(**data.dict())
+    promo = Promotion(
+        title=data.title, description=data.description,
+        discount_percent=data.discount_percent,
+        bonus_percent=data.bonus_percent if data.bonus_percent else 5.0,
+        start_date=data.start_date, end_date=data.end_date
+    )
     db.add(promo)
     db.commit()
     db.refresh(promo)
